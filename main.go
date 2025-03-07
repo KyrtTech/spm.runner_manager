@@ -106,11 +106,14 @@ func startRunner(w http.ResponseWriter, r *http.Request) {
 		err := cmd.Wait()
 		if err != nil {
 			fmt.Printf("Process %s exited with error: %v\n", processID, err)
+			processesMutex.Lock()
+			runnerProcesses[processID].Status = "errored"
+			processesMutex.Unlock()
+		} else {
+			processesMutex.Lock()
+			runnerProcesses[processID].Status = "stopped"
+			processesMutex.Unlock()
 		}
-		// Clean up process from map when it exits
-		processesMutex.Lock()
-		runnerProcesses[processID].Status = "errored"
-		processesMutex.Unlock()
 	}()
 
 	// Store process info
@@ -145,16 +148,53 @@ func listRunners(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(keys)
 }
 
-func runnerInfo(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+func runnerInfo(w http.ResponseWriter, process *RunnerProcess) {
+	response := RunnerResponse{
+		ID:     process.ID,
+		Status: process.Status,
+		Port:   process.Port,
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func runnerStop(w http.ResponseWriter, process *RunnerProcess) {
+	// Kill the process
+	if process.Process != nil && process.Process.Process != nil {
+		if err := process.Process.Process.Kill(); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to stop runner: %v", err), http.StatusInternalServerError)
+			// Update the process status in the map
+			processesMutex.Lock()
+			process.Status = "errored"
+			process.Process = nil
+			processesMutex.Unlock()
+			return
+		}
+	}
+
+	// Update the process status in the map
+	processesMutex.Lock()
+	process.Status = "stopped"
+	process.Process = nil
+	processesMutex.Unlock()
+
+	// Return success response
+	response := map[string]string{"status": "stopped", "id": process.ID}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+func runners(w http.ResponseWriter, r *http.Request) {
 	// Get process ID from URL path
 	processId := strings.TrimPrefix(r.URL.Path, "/runner/")
 	if processId == "" {
 		http.Error(w, "Process ID is required", http.StatusBadRequest)
+		return
+	}
+
+	if r.Method != http.MethodGet && r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -168,14 +208,12 @@ func runnerInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := RunnerResponse{
-		ID:     process.ID,
-		Status: process.Status,
-		Port:   process.Port,
+	switch r.Method {
+	case http.MethodGet:
+		runnerInfo(w, process)
+	case http.MethodDelete:
+		runnerStop(w, process)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
 }
 
 func main() {
@@ -196,7 +234,7 @@ func main() {
 	mux.HandleFunc("/", getRoot)
 	mux.HandleFunc("/start", startRunner)
 	mux.HandleFunc("/list", listRunners)
-	mux.HandleFunc("/runner/", runnerInfo)
+	mux.HandleFunc("/runner/", runners)
 
 	io.WriteString(os.Stdout, fmt.Sprintf("Runner Manager started on port: %d\n", *port))
 	io.WriteString(os.Stdout, fmt.Sprintf("Using path: %s for runner\n", *path))
