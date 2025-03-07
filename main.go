@@ -28,9 +28,10 @@ type RunnerProcess struct {
 }
 
 type RunnerResponse struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
-	Port   int    `json:"port"`
+	ID       string `json:"id"`
+	Status   string `json:"status"`
+	Port     int    `json:"port"`
+	Endpoint string `json:"endpoint"`
 }
 
 type RunnerArgs struct {
@@ -150,9 +151,10 @@ func listRunners(w http.ResponseWriter, r *http.Request) {
 
 func runnerInfo(w http.ResponseWriter, process *RunnerProcess) {
 	response := RunnerResponse{
-		ID:     process.ID,
-		Status: process.Status,
-		Port:   process.Port,
+		ID:       process.ID,
+		Status:   process.Status,
+		Port:     process.Port,
+		Endpoint: fmt.Sprintf("http://localhost:%d", process.Port),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
