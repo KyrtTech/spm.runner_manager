@@ -11,10 +11,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/google/uuid"
 )
@@ -218,6 +220,27 @@ func runners(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// stopAllProcesses terminates all running processes
+func stopAllProcesses() {
+	fmt.Println("Stopping all runner processes...")
+
+	processesMutex.Lock()
+	defer processesMutex.Unlock()
+
+	for id, process := range runnerProcesses {
+		if process.Process != nil && process.Process.Process != nil {
+			fmt.Printf("Stopping process %s\n", id)
+			if err := process.Process.Process.Kill(); err != nil {
+				fmt.Printf("Error stopping process %s: %v\n", id, err)
+			}
+			process.Status = "stopped"
+			process.Process = nil
+		}
+	}
+
+	fmt.Println("All processes stopped")
+}
+
 func main() {
 	port := flag.Int("port", 2435, "Port to run the server on")
 	path := flag.String("path", "spm_runner", "Path to runner executable")
@@ -230,6 +253,21 @@ func main() {
 	}
 
 	runnerPath = *path
+
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+
+	// Handle signals in a separate goroutine
+	go func() {
+		sig := <-sigChan
+		fmt.Printf("Received signal: %v\n", sig)
+		stopAllProcesses()
+		os.Exit(0)
+	}()
+
+	// Ensure cleanup happens even on normal exit
+	defer stopAllProcesses()
 
 	mux := http.NewServeMux()
 
