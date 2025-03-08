@@ -48,6 +48,28 @@ var (
 	runnerPath      = ""
 )
 
+// enableCORS sets CORS headers to allow all origins
+func enableCORS(w http.ResponseWriter) {
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+}
+
+// corsMiddleware wraps an http.HandlerFunc with CORS support
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		enableCORS(w)
+
+		// Handle preflight OPTIONS requests
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next(w, r)
+	}
+}
+
 func getRoot(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("got / request\n")
 	io.WriteString(w, "Runner Manager API - Bridge between Runner UI and Runner CLI")
@@ -271,10 +293,10 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/", getRoot)
-	mux.HandleFunc("/start", startRunner)
-	mux.HandleFunc("/list", listRunners)
-	mux.HandleFunc("/runner/", runners)
+	mux.HandleFunc("/", corsMiddleware(getRoot))
+	mux.HandleFunc("/start", corsMiddleware(startRunner))
+	mux.HandleFunc("/list", corsMiddleware(listRunners))
+	mux.HandleFunc("/runner/", corsMiddleware(runners))
 
 	io.WriteString(os.Stdout, fmt.Sprintf("Runner Manager started on port: %d\n", *port))
 	io.WriteString(os.Stdout, fmt.Sprintf("Using path: %s for runner\n", *path))
