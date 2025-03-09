@@ -82,8 +82,9 @@ type ProcessInput struct {
 }
 
 type StartRunnerBody struct {
-	Infra string `json:"infra" binding:"required"`
-	App   string `json:"app" binding:"required"`
+	Infra    string `json:"infra" binding:"required"`
+	App      string `json:"app" binding:"required"`
+	Registry string `json:"registry"`
 }
 
 func startRunner(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +115,14 @@ func startRunner(w http.ResponseWriter, r *http.Request) {
 	// Create new process
 	args := []string{"install", "--interactive", "--port", strconv.Itoa(port), "--infra", input.Infra, "--application", input.App}
 	cmd := exec.Command(runnerPath, args...)
+
+	// Set environment variables for the process
+	if input.Registry != "" {
+		cmd.Env = append(
+			os.Environ(),
+			fmt.Sprintf("SPM_CONFIG_REGISTRY=%s", input.Registry),
+		)
+	}
 
 	fmt.Printf("path %s\n", runnerPath)
 
