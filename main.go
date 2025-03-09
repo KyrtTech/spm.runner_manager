@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -151,8 +152,37 @@ func startRunner(w http.ResponseWriter, r *http.Request) {
 	}
 	processesMutex.Unlock()
 
+	// Wait for the endpoint to be ready
+	endpoint := fmt.Sprintf("http://localhost:%d", port)
+	maxRetries := 30
+	retryDelay := time.Second
+	ready := false
+
+	for i := 0; i < maxRetries; i++ {
+		resp, err := http.Get(endpoint)
+		if err == nil && resp.StatusCode < 500 {
+			resp.Body.Close()
+			ready = true
+			break
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		time.Sleep(retryDelay)
+	}
+
 	// Return process ID to client
-	response := map[string]any{"process_id": processID, "port": port, "endpoint": fmt.Sprintf("http://localhost:%d", port)}
+	status := "running"
+	if !ready {
+		status = "starting"
+	}
+
+	response := map[string]any{
+		"process_id": processID,
+		"port":       port,
+		"endpoint":   endpoint,
+		"status":     status,
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
