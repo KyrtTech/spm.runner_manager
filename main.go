@@ -152,7 +152,7 @@ func startRunner(w http.ResponseWriter, r *http.Request) {
 	processesMutex.Unlock()
 
 	// Return process ID to client
-	response := map[string]any{"process_id": processID, "port": port}
+	response := map[string]any{"process_id": processID, "port": port, "endpoint": fmt.Sprintf("http://localhost:%d", port)}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
