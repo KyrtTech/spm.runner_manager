@@ -46,3 +46,7 @@ spm_runner_orchestrator --port 8080
 # Show help
 spm_runner_orchestrator --help
 ```
+
+## License
+
+This project is licensed under the [Apache License, Version 2.0](LICENSE).
